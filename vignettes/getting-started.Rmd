@@ -1,0 +1,413 @@
+---
+title: "Getting started with Rfactor"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with Rfactor}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Introduction
+
+`Rfactor` calculates rainfall erosivity from timestamped precipitation
+records.
+
+A typical workflow consists of:
+
+1. reading and validating rainfall data;
+2. identifying independent rainfall events;
+3. calculating maximum rainfall intensities and rainfall kinetic energy;
+4. calculating event EI30 erosivity;
+5. classifying events according to configurable omission criteria;
+6. aggregating erosive-event EI30 by calendar month or year.
+
+The package focuses specifically on rainfall erosivity. It does not
+calculate the other USLE or RUSLE factors and does not perform spatial
+interpolation or mapping.
+
+```{r load-package}
+library(Rfactor)
+```
+
+# Rainfall input
+
+`rf_read_rainfall()` expects a delimited file containing a timestamp
+column and a precipitation column.
+
+Precipitation values represent rainfall depth during each observation
+interval, in millimetres.
+
+The rainfall record does not need to contain every expected timestamp.
+Sparse records and temporal gaps are accepted when timestamp differences
+remain aligned with the declared base temporal resolution.
+
+For this vignette, create a small synthetic 1-minute rainfall record
+containing two rainfall events:
+
+- a 30-mm event in July;
+- a 3-mm low-intensity event in August.
+
+The long dry period between them is deliberately absent from the input
+file.
+
+```{r create-example}
+event_1_time <- seq(
+  from = as.POSIXct(
+    "2025-07-01 12:00:00",
+    tz = "UTC"
+  ),
+  by = "1 min",
+  length.out = 30
+)
+
+event_2_time <- seq(
+  from = as.POSIXct(
+    "2025-08-01 12:00:00",
+    tz = "UTC"
+  ),
+  by = "1 min",
+  length.out = 30
+)
+
+example_rainfall <- data.frame(
+  datetime = format(
+    c(
+      event_1_time,
+      event_2_time
+    ),
+    "%Y-%m-%d %H:%M:%S",
+    tz = "UTC"
+  ),
+  precip_mm = c(
+    rep(1.0, 30),
+    rep(0.1, 30)
+  )
+)
+
+example_file <- tempfile(
+  fileext = ".csv"
+)
+
+utils::write.csv(
+  example_rainfall,
+  example_file,
+  row.names = FALSE
+)
+```
+
+Read the file through the public Rfactor reader:
+
+```{r read-rainfall}
+rain <- rf_read_rainfall(
+  example_file,
+  datetime_col = "datetime",
+  precip_col = "precip_mm",
+  tz = "UTC",
+  expected_interval_min = 1
+)
+
+head(rain)
+```
+
+`expected_interval_min = 1` declares that the underlying rainfall
+resolution is one minute.
+
+The approximately one-month gap between the two synthetic events is
+accepted because the package does not require a temporally complete
+rainfall series.
+
+The time zone should describe how the timestamps in the source data are
+to be interpreted. `"UTC"` is used here because the synthetic timestamps
+were created in UTC.
+
+# Calculation settings
+
+Calculation settings are created with `rf_settings()`.
+
+```{r settings}
+settings <- rf_settings()
+
+settings
+```
+
+The principal defaults use:
+
+- a 6-hour rainfall-event break;
+- precipitation omission below 12.70 mm;
+- maximum 15-minute intensity omission below 25.40 mm/h;
+- `"all"` omission logic;
+- Brown and Foster (1987) rainfall kinetic energy.
+
+With `"all"` omission logic, an event is omitted only if all enabled
+omission conditions are satisfied.
+
+The comparisons are strict. For example, exactly 12.70 mm does not
+satisfy a criterion defined as precipitation less than 12.70 mm.
+
+# Identify rainfall events
+
+Independent rainfall events are identified with
+`rf_identify_storms()`.
+
+```{r identify-events}
+storms <- rf_identify_storms(
+  rain,
+  settings = settings
+)
+
+unique(
+  storms$storm_id
+)
+```
+
+With the default 6-hour break, consecutive positive-rainfall
+observations separated by 6 hours or less remain in the same event. A
+gap greater than 6 hours starts a new event.
+
+Any positive rainfall observation resets the storm-break clock in the
+fixed-interval algorithm validated against RIST 3.99.10.
+
+The object returned by `rf_identify_storms()` stores the calculation
+settings and temporal resolution as metadata, so the next calculation
+can normally use them automatically.
+
+# Calculate event EI30
+
+Use `rf_calculate_ei30()` to calculate event precipitation, maximum
+rolling rainfall intensities, kinetic energy, EI30, and erosive-event
+classification.
+
+```{r calculate-ei30}
+events <- rf_calculate_ei30(
+  storms
+)
+
+events[
+  ,
+  c(
+    "storm_id",
+    "event_start",
+    "event_end",
+    "duration_min",
+    "precip_mm",
+    "i15_mm_h",
+    "i30_mm_h",
+    "energy_mj_ha",
+    "ei30",
+    "omitted",
+    "erosive"
+  )
+]
+```
+
+Event EI30 is calculated as
+
+\[
+EI_{30} = E \times I_{30},
+\]
+
+where \(E\) is total rainfall kinetic energy in MJ/ha and \(I_{30}\) is
+the maximum continuous 30-minute rainfall intensity in mm/h.
+
+EI30 therefore has units of MJ mm/(ha h).
+
+The July event contains 30 mm of high-intensity rainfall and is retained
+as erosive under the default settings.
+
+The August event contains only 3 mm at low intensity. It satisfies both
+default omission conditions and is therefore classified as non-erosive.
+
+Notice that `ei30` is still calculated for the omitted event. The
+`erosive` classification determines whether that event contributes to
+period aggregation.
+
+# Aggregate rainfall erosivity
+
+Use `rf_calculate_rfactor()` to aggregate contributing event EI30 values
+by calendar month or year.
+
+```{r monthly}
+monthly <- rf_calculate_rfactor(
+  events,
+  period = "monthly"
+)
+
+monthly
+```
+
+Both July and August appear because both months contain identified
+rainfall events.
+
+August has `R = 0` and `n_events = 0` because its rainfall event is
+non-erosive.
+
+Months that are completely absent from the supplied event data are not
+created.
+
+Yearly aggregation uses the same principle:
+
+```{r yearly}
+yearly <- rf_calculate_rfactor(
+  events,
+  period = "yearly"
+)
+
+yearly
+```
+
+`n_events` is the number of erosive events with non-missing EI30 that
+actually contribute to the reported total.
+
+# Interpreting the yearly result
+
+A yearly `R` value returned by `rf_calculate_rfactor()` is the sum of
+contributing event EI30 values calculated from the rainfall data
+available for that calendar year.
+
+It should not automatically be interpreted as the climatological
+long-term mean annual rainfall-runoff erosivity factor used by USLE or
+RUSLE.
+
+Deriving a representative long-term R-factor requires an appropriate
+multi-year rainfall record together with an assessment of record
+completeness and representativeness.
+
+`Rfactor` deliberately does not perform that completeness assessment.
+
+# Including all rainfall events
+
+The omission criteria can be disabled independently.
+
+To include every identified rainfall event:
+
+```{r include-all}
+include_all <- rf_settings(
+  omit_precip = FALSE,
+  omit_intensity = FALSE
+)
+
+all_storms <- rf_identify_storms(
+  rain,
+  settings = include_all
+)
+
+all_events <- rf_calculate_ei30(
+  all_storms
+)
+
+all_events[
+  ,
+  c(
+    "event_start",
+    "precip_mm",
+    "omitted",
+    "erosive"
+  )
+]
+```
+
+When both omission criteria are disabled, every identified rainfall
+event is retained.
+
+# Changing the kinetic-energy equation
+
+Three rainfall kinetic-energy equations are available:
+
+- `"brown_foster_1987"`;
+- `"mcgregor_1995"`;
+- `"laws_parsons_1943"`.
+
+For example:
+
+```{r energy-equation}
+mcgregor_settings <- rf_settings(
+  energy_equation = "mcgregor_1995"
+)
+
+mcgregor_settings$energy_equation
+```
+
+The selected equation is subsequently used by
+`rf_calculate_ei30()` when calculating event kinetic energy.
+
+# Temporal resolution
+
+Requested rainfall-intensity durations must be compatible with the
+temporal resolution of the source rainfall data.
+
+Each requested duration must be an exact multiple of the observation
+interval.
+
+For example, 10-minute rainfall data can support 10-, 20-, 30-, and
+60-minute rolling intensities:
+
+```{r ten-minute-settings}
+settings_10min <- rf_settings(
+  intensity_durations_min = c(
+    10,
+    20,
+    30,
+    60
+  ),
+  omit_intensity_duration_min = 10
+)
+
+settings_10min
+```
+
+A true 5- or 15-minute intensity cannot be recovered directly from
+10-minute rainfall totals.
+
+EI30 additionally requires an exact 30-minute intensity window.
+Consequently, the source interval must divide 30 minutes exactly.
+
+Fixed-interval Rfactor calculations have been empirically compared with
+RIST 3.99.10 using 1-, 5-, 10-, 15-, and 30-minute rainfall data.
+
+Temporal aggregation can change maximum rainfall intensity, kinetic
+energy, and EI30 even when the total precipitation amount is preserved.
+
+# Sparse rainfall records
+
+`rf_read_rainfall()` and `rf_validate_rainfall()` do not require every
+expected timestamp to be present.
+
+During rainfall-event identification, Rfactor reconstructs the expected
+regular time grid only from the first through the last positive-rainfall
+observation belonging to each event.
+
+Observations supplied by the user are preserved. Expected time
+positions absent from the supplied record are assigned zero recorded
+rainfall for the calculation.
+
+This inserted zero is a computational representation of an absent
+source position. It does not assert that the interval was observed and
+dry, and it does not estimate missing precipitation.
+
+Rfactor does not fill completely absent months or years and does not
+assess whether a rainfall record is climatologically complete.
+
+# Next steps
+
+The function help pages provide the complete argument and return-value
+documentation:
+
+```r
+?rf_settings
+?rf_read_rainfall
+?rf_identify_storms
+?rf_calculate_ei30
+?rf_calculate_rfactor
+```
+
+A separate methodology and validation vignette documents the
+kinetic-energy equations, event-separation experiments, RIST
+comparisons, temporal-resolution validation, and interpretation of the
+resulting erosivity quantities in greater detail.

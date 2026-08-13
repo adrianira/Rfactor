@@ -1,0 +1,11 @@
+^Rfactor\.Rproj$
+^\.Rproj\.user$
+^\.gitignore$
+^\.Rhistory$
+^\.Renviron$
+^README\.Rmd$
+^LICENSE\.md$
+^data-raw$
+^sample$
+^doc$
+^Meta$

@@ -1,0 +1,6 @@
+resolution_min,calculated_intensities,expected_variable_storm_i30_mm_h
+1,"5, 10, 15, 20, 30, 60",42
+5,"5, 10, 15, 20, 30, 60",42
+10,"10, 20, 30, 60",40
+15,"15, 30, 60",42
+30,"30, 60",36

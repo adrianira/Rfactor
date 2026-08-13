@@ -1,0 +1,4 @@
+event,start,precip_per_min_mm,intensity_mm_h,total_precip_mm
+1,2025-08-01 00:00:00,0.1,6,3
+2,2025-08-01 07:00:00,1,60,30
+3,2025-08-01 14:00:00,2,120,60

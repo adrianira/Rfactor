@@ -1,0 +1,762 @@
+---
+title: "Methods and validation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Methods and validation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Scope
+
+`Rfactor` calculates rainfall erosivity from timestamped precipitation
+records.
+
+The package implements a workflow for:
+
+1. identifying independent rainfall events;
+2. calculating maximum continuous rainfall intensities;
+3. calculating rainfall kinetic energy;
+4. calculating event EI30 erosivity;
+5. classifying events according to configurable omission criteria;
+6. aggregating contributing event EI30 values by calendar month or
+   year.
+
+The package does not calculate the remaining USLE or RUSLE factors and
+does not perform spatial interpolation or mapping.
+
+The methods implemented in `Rfactor` were empirically compared with
+RIST 3.99.10 using controlled synthetic rainfall records and real
+precipitation records.
+
+Unless explicitly stated otherwise, statements about RIST behaviour in
+this vignette refer specifically to the RIST 3.99.10 fixed-interval
+mode used during package validation. They should not be interpreted as
+claims about every RIST version or input mode.
+
+# Event EI30 and the rainfall-runoff erosivity factor
+
+For an individual rainfall event, `Rfactor` calculates EI30 as
+
+\[
+EI_{30} = E I_{30},
+\]
+
+where:
+
+- \(E\) is total event rainfall kinetic energy in MJ/ha;
+- \(I_{30}\) is the maximum continuous 30-minute rainfall intensity in
+  mm/h.
+
+Event EI30 therefore has units of
+
+\[
+\mathrm{MJ\ mm\ ha^{-1}\ h^{-1}}.
+\]
+
+The rainfall-runoff erosivity factor used by USLE and RUSLE is a
+long-term climatic quantity derived from erosive rainfall events over an
+appropriate historical record.
+
+`rf_calculate_rfactor()` does not automatically estimate that
+climatological long-term mean annual quantity. It sums contributing
+event EI30 values within a requested calendar month or year.
+
+Consequently, a yearly result from `rf_calculate_rfactor()` is the
+erosivity calculated from the events available for that year. A
+representative long-term R-factor requires an appropriate multi-year
+record and a separate assessment of completeness and
+representativeness.
+
+# Rainfall-event separation
+
+Rainfall events are identified from observations containing positive
+rainfall.
+
+For the fixed-interval behaviour validated against RIST 3.99.10,
+consecutive positive-rainfall observations belong to the same event
+when their elapsed separation is less than or equal to the configured
+storm-break duration.
+
+A new event begins when
+
+\[
+\Delta t >
+t_{\mathrm{break}}.
+\]
+
+With the default
+
+\[
+t_{\mathrm{break}} = 6\ \mathrm{h},
+\]
+
+the rule is therefore:
+
+- exactly 6 hours: same event;
+- more than 6 hours: new event.
+
+Any positive rainfall observation resets the storm-break clock.
+
+The storm-break duration is configurable through
+`storm_break_hours`.
+
+## RIST storm-break precipitation setting
+
+RIST exposes a precipitation value associated with storm-break
+configuration. The Rfactor setting is named
+`storm_break_precip_mm` and defaults to 1.27 mm.
+
+A dedicated synthetic experiment was performed to determine whether
+this value affected fixed-interval storm grouping.
+
+The same rainfall input was processed using RIST storm-break
+precipitation values of:
+
+\[
+0,\ 0.20,\ 1.27,\ 2.00,\ 10.00\ \mathrm{mm}.
+\]
+
+The experiment included:
+
+- no intermediate rainfall;
+- a 0.40-mm positive intermediate observation;
+- an intermediate observation exactly equal to 1.27 mm;
+- an intermediate observation above 1.27 mm;
+- multiple small intermediate observations whose combined amount was
+  below 1.27 mm;
+- multiple small observations whose combined amount exceeded
+  1.27 mm.
+
+All tested precipitation settings produced identical event grouping.
+
+The six experimental cases produced seven events in total: the control
+case containing a gap greater than six hours split into two events,
+while every case containing intermediate positive rainfall remained one
+event.
+
+The validated fixed-interval Rfactor algorithm therefore uses
+`storm_break_hours` for event separation and retains
+`storm_break_precip_mm` as RIST configuration metadata.
+
+This conclusion is deliberately limited to the tested RIST 3.99.10
+fixed-interval behaviour.
+
+# Sparse rainfall records
+
+`Rfactor` does not require a rainfall source file to contain every
+expected time step.
+
+This is important for historical pluviograph records and timestamped
+rainfall archives in which dry periods may be absent.
+
+The input reader preserves the observations supplied by the user.
+It does not create a complete rainfall series over the whole period of
+record.
+
+Event identification operates from the timestamps containing positive
+rainfall. Once an event has been identified, a regular time grid is
+reconstructed only between its first and last positive-rainfall
+observations.
+
+Expected positions absent from the supplied source record are assigned
+zero recorded rainfall for the calculation.
+
+This treatment preserves elapsed time for rolling-intensity and
+kinetic-energy calculations without generating long sequences of
+explicit zero-rainfall rows between independent events.
+
+An inserted zero does not assert that the corresponding interval was
+actually observed and dry. It is the computational representation used
+for a timestamp position absent from the supplied record.
+
+The package does not estimate missing precipitation and does not assess
+whether the rainfall archive is climatologically complete.
+
+Completely absent months or years are not created or imputed.
+
+# Maximum rainfall intensity
+
+`rf_max_intensity()` calculates continuous rolling maximum rainfall
+intensity.
+
+For a requested duration \(D\),
+
+\[
+I_D =
+P_{D,\max}
+\frac{60}{D},
+\]
+
+where \(P_{D,\max}\) is the greatest precipitation depth found in a
+continuous rolling window of duration \(D\), expressed in minutes.
+
+Windows are not restricted to fixed clock boundaries.
+
+For example, a 30-minute rainfall period beginning at 12:20 is evaluated
+as a complete 30-minute window even though it crosses the conventional
+12:30 clock boundary.
+
+## Partial windows
+
+Partial rolling windows are permitted when an event is shorter than the
+requested duration.
+
+For example, if 10 mm occurs during a 10-minute event, its 30-minute
+intensity is calculated as
+
+\[
+I_{30}
+=
+10
+\frac{60}{30}
+=
+20\ \mathrm{mm/h}.
+\]
+
+This behaviour was reproduced by RIST 3.99.10 during fixed-interval
+validation.
+
+# Temporal-resolution compatibility
+
+A requested rainfall-intensity duration must be an exact multiple of
+the rainfall observation interval.
+
+Examples include:
+
+| Source interval | Compatible commonly used durations |
+|---:|:---|
+| 1 min | 5, 10, 15, 20, 30, 60 min |
+| 5 min | 5, 10, 15, 20, 30, 60 min |
+| 10 min | 10, 20, 30, 60 min |
+| 15 min | 15, 30, 60 min |
+| 30 min | 30, 60 min |
+
+EI30 requires a genuine 30-minute intensity. The rainfall interval must
+therefore divide 30 minutes exactly.
+
+Data coarser than 30 minutes cannot resolve a genuine I30.
+
+This also means that it would be incorrect to describe Rfactor as
+supporting every possible temporal resolution from 1 through 30
+minutes. Validation was performed specifically at 1, 5, 10, 15, and
+30 minutes.
+
+# Rainfall kinetic energy
+
+For each fixed rainfall interval, precipitation depth is converted to
+rainfall intensity:
+
+\[
+i_k =
+P_k
+\frac{60}{\Delta t},
+\]
+
+where:
+
+- \(P_k\) is interval rainfall depth in mm;
+- \(\Delta t\) is interval duration in minutes;
+- \(i_k\) is rainfall intensity in mm/h.
+
+Unit rainfall energy \(e_k\) is calculated from the selected
+kinetic-energy equation in MJ/ha/mm.
+
+Total event kinetic energy is
+
+\[
+E =
+\sum_k e_k P_k.
+\]
+
+`Rfactor` provides three kinetic-energy equations.
+
+## Brown and Foster (1987)
+
+The default equation is
+
+\[
+e =
+0.29
+\left[
+1 -
+0.72
+\exp(-0.05i)
+\right].
+\]
+
+The equation identifier is:
+
+```r
+"brown_foster_1987"
+```
+
+## McGregor et al. (1995)
+
+The implemented equation is
+
+\[
+e =
+0.29
+\left[
+1 -
+0.72
+\exp(-0.082i)
+\right].
+\]
+
+The equation identifier is:
+
+```r
+"mcgregor_1995"
+```
+
+The RIST 3.99.10 graphical interface displayed the exponential
+coefficient as 0.08 during validation. However, a dedicated numerical
+experiment at several rainfall intensities showed that RIST's calculated
+energy values agreed with the 0.082 formulation used by `Rfactor`.
+
+The package therefore uses 0.082.
+
+## Laws and Parsons (1943)
+
+For positive rainfall intensity, the implemented formulation is
+
+\[
+e =
+0.119 +
+0.0873\log_{10}(i).
+\]
+
+The equation identifier is:
+
+```r
+"laws_parsons_1943"
+```
+
+At zero rainfall intensity, the logarithmic expression is undefined.
+A zero-rainfall interval contributes no kinetic energy, so Rfactor
+assigns zero unit energy to that interval.
+
+A dedicated RIST experiment included a constant rainfall intensity of
+120 mm/h. RIST 3.99.10 applied the equation without a 76.2-mm/h upper
+intensity cap in that test.
+
+Rfactor therefore does not impose such a cap.
+
+# Energy-equation validation
+
+Three synthetic 30-minute constant-intensity events were evaluated at:
+
+- 6 mm/h;
+- 60 mm/h;
+- 120 mm/h.
+
+All omission criteria were disabled so that the kinetic-energy
+calculation could be compared independently.
+
+The selected results were:
+
+| Equation | Intensity (mm/h) | Rfactor E (MJ/ha) | RIST E (MJ/ha) |
+|:---|---:|---:|---:|
+| Brown and Foster | 6 | 0.405951 | 0.406 |
+| Brown and Foster | 60 | 8.388134 | 8.388 |
+| Brown and Foster | 120 | 17.368946 | 17.369 |
+| McGregor et al. | 6 | 0.487018 | 0.487 |
+| McGregor et al. | 60 | 8.654278 | 8.654 |
+| McGregor et al. | 120 | 17.399333 | 17.399 |
+| Laws and Parsons | 6 | 0.560798 | 0.561 |
+| Laws and Parsons | 60 | 8.226978 | 8.227 |
+| Laws and Parsons | 120 | 18.030751 | 18.031 |
+
+The 120-mm/h Laws–Parsons result was particularly important because it
+demonstrated empirically that the tested RIST calculation did not use
+the previously suspected 76.2-mm/h cap.
+
+# Event omission
+
+Rainfall-event omission is configurable.
+
+The default precipitation condition is
+
+\[
+P < 12.70\ \mathrm{mm}
+\]
+
+and the default intensity condition is
+
+\[
+I_{15} < 25.40\ \mathrm{mm/h}.
+\]
+
+Both criteria are enabled by default and
+
+```r
+omit_logic = "all"
+```
+
+means that an event is omitted only when both enabled conditions are
+satisfied.
+
+Thus, under the default configuration:
+
+\[
+\mathrm{omitted}
+=
+(P < 12.70)
+\land
+(I_{15} < 25.40).
+\]
+
+The inequalities are strict.
+
+Consequently:
+
+- \(P = 12.70\) mm does not satisfy the precipitation condition;
+- \(I_{15} = 25.40\) mm/h does not satisfy the intensity condition.
+
+The package uses a small floating-point tolerance when making these
+strict comparisons so that numerical representation error near an exact
+threshold does not change event classification.
+
+## Alternative omission configurations
+
+The two criteria can be independently enabled or disabled.
+
+With
+
+```r
+omit_logic = "any"
+```
+
+an event is omitted when any enabled criterion is satisfied.
+
+With only one criterion enabled, only that criterion is evaluated.
+
+With
+
+```r
+omit_precip = FALSE
+omit_intensity = FALSE
+```
+
+all identified rainfall events are retained.
+
+For a disabled criterion, its corresponding condition column in the
+event output is `NA`, meaning that the condition was not evaluated.
+
+The intensity omission duration can be selected from 5, 10, 15, 30,
+or 60 minutes, provided it is compatible with the rainfall temporal
+resolution and is included among the calculated intensity durations.
+
+# Single-record rainfall events
+
+A dedicated edge-case experiment showed that RIST 3.99.10 assigned:
+
+\[
+E = 0
+\]
+
+and
+
+\[
+EI_{30} = 0
+\]
+
+to rainfall events represented by only one fixed-interval rainfall
+record.
+
+Rfactor makes this behaviour optional.
+
+The default is:
+
+```r
+single_record_energy = "calculate"
+```
+
+which applies the selected energy equation normally.
+
+To reproduce the observed RIST 3.99.10 behaviour, use:
+
+```r
+single_record_energy = "rist_zero"
+```
+
+This is the principal reason that the complete set of Rfactor defaults
+should not be described as exactly identical to RIST defaults.
+
+# Canonical synthetic validation
+
+A synthetic continuous 1-minute rainfall record was constructed to test
+the principal methodological rules against RIST.
+
+The cases included:
+
+- a 30-minute uniform event;
+- an event crossing a conventional half-hour clock boundary;
+- an event shorter than the 30-minute intensity window;
+- a small low-intensity omitted event;
+- a small high-intensity retained event;
+- precipitation exactly equal to 12.70 mm;
+- I15 exactly equal to 25.40 mm/h;
+- rainfall separated by more than six hours;
+- small positive intermediate rainfall resetting the storm-break clock;
+- exact storm-break boundary cases;
+- single-record events.
+
+In the canonical comparison, Rfactor and RIST identified the same
+events and the same six erosive events.
+
+For the complete synthetic comparison:
+
+| Quantity | Rfactor | RIST |
+|:---|---:|---:|
+| Number of identified events | 11 | 11 |
+| Number of erosive events | 6 | 6 |
+| All-event kinetic energy (MJ/ha) | 32.089914 | 32.089 |
+| All-event EI30 | 1193.089094 | 1193.089 |
+| Erosive-event kinetic energy (MJ/ha) | 24.751309 | 24.751 |
+| Erosive-event EI30 | 1119.703043 | 1119.703 |
+
+Differences shown here are consistent with the numerical precision
+reported in the RIST output.
+
+# Temporal-resolution validation
+
+A second synthetic experiment tested fixed rainfall intervals of:
+
+\[
+1,\ 5,\ 10,\ 15,\ 30\ \mathrm{minutes}.
+\]
+
+The same underlying 1-minute rainfall record was aggregated before
+being processed independently by Rfactor and RIST.
+
+Two 60-minute events were used:
+
+1. a constant 6-mm/h event with total precipitation of 6 mm;
+2. a variable-intensity event with total precipitation of 36 mm.
+
+The variable event contained four consecutive 15-minute intensity
+periods of:
+
+\[
+12,\ 60,\ 24,\ 48\ \mathrm{mm/h}.
+\]
+
+Temporal aggregation intentionally changed its I30.
+
+## Rfactor result
+
+For the variable event:
+
+| Resolution | Precipitation (mm) | Energy (MJ/ha) | I30 (mm/h) | EI30 |
+|---:|---:|---:|---:|---:|
+| 1 min | 36 | 9.335652 | 42 | 392.097396 |
+| 5 min | 36 | 9.335652 | 42 | 392.097396 |
+| 10 min | 36 | 9.289595 | 40 | 371.583812 |
+| 15 min | 36 | 9.335652 | 42 | 392.097396 |
+| 30 min | 36 | 9.197481 | 36 | 331.109327 |
+
+This demonstrates that preserving total precipitation does not imply
+preserving erosivity. Temporal aggregation changes the intensity
+distribution and can therefore change both kinetic energy and EI30.
+
+## Comparison with RIST
+
+The 1-, 5-, and 30-minute cases agreed with RIST to the reported
+precision.
+
+For the variable synthetic event, RIST 3.99.10 showed small additional
+differences at 10- and 15-minute resolution:
+
+| Resolution | Rfactor precipitation (mm) | RIST precipitation (mm) | Rfactor I30 | RIST I30 | Rfactor EI30 | RIST EI30 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10 min | 36.00 | 36.18 | 40.000 | 40.553 | 371.584 | 376.724 |
+| 15 min | 36.00 | 36.13 | 42.000 | 42.503 | 392.097 | 396.796 |
+
+Rfactor preserves the rainfall totals produced directly by aggregation
+of the synthetic source data. The package does not add precipitation in
+order to reproduce these RIST-specific differences.
+
+The experiment therefore supports fixed-interval calculations at the
+tested resolutions while also documenting that exact numerical
+identity with RIST should not be assumed for every temporal resolution.
+
+# Validation with real rainfall records
+
+Synthetic experiments isolate individual algorithmic decisions, but the
+package was also tested with real precipitation archives from Meteo
+Romania (National Meteorological Administration).
+
+The original Meteo Romania precipitation records are private and are
+not distributed with the package or public source repository.
+
+## Bucuresti-Filaret, 2025
+
+Validation with available 1-minute Bucuresti-Filaret rainfall included
+complete and gapped portions of the 2025 record.
+
+For May 2025:
+
+- Rfactor identified 16 rainfall events;
+- 5 were classified as erosive;
+- monthly erosivity was 403.791892;
+- the corresponding RIST result was 403.79.
+
+A July-to-September subset contained 18 identified events, all of which
+were non-erosive under the configured criteria.
+
+Across all available 2025 observations:
+
+- 58 rainfall events were identified;
+- 11 were erosive;
+- Rfactor and RIST agreed on event classification.
+
+A small discrepancy occurred for one June event involving a short
+partial rolling window and RIST-reported rainfall precision. The
+Rfactor calculation retained the rainfall values represented by the
+source data rather than introducing a RIST-specific adjustment.
+
+## Vladeasa 1800, 1991
+
+A historical sparse pluviograph record from Vladeasa 1800 was used to
+test the sparse-data workflow.
+
+The source does not contain every one-minute timestamp. Long dry
+periods may be absent, while some explicit zero-rainfall observations
+are retained.
+
+Rfactor identified:
+
+- 55 rainfall events;
+- 13 erosive events.
+
+Event dates, precipitation, rolling intensities, kinetic energy, EI30,
+and erosive classification agreed with the corresponding RIST
+comparison to the displayed precision.
+
+Selected monthly erosivity totals were:
+
+| Month | R |
+|:---|---:|
+| June | 321.48 |
+| July | 211.45 |
+| August | 293.88 |
+| September | 84.26 |
+
+These values agreed with the displayed RIST monthly event-EI30 totals.
+
+This validation was particularly important because it demonstrated that
+the event-based reconstruction approach can operate on a sparse
+historical pluviograph archive without requiring the entire source
+period to be expanded to a minute-by-minute rainfall table.
+
+# Monthly and yearly aggregation
+
+`rf_calculate_rfactor()` uses all supplied event rows to establish which
+calendar periods are represented.
+
+Only events satisfying
+
+```r
+erosive == TRUE
+```
+
+and having a non-missing EI30 value contribute to `R` and to
+`n_events`.
+
+A represented month containing rainfall events but no contributing
+erosive events is returned as
+
+```text
+R = 0
+n_events = 0
+```
+
+A month or year containing no event rows at all is not generated.
+
+Events are assigned to a calendar period according to
+`event_start`. An event crossing a month or year boundary is therefore
+assigned in full to the period in which it began.
+
+# What validation does and does not establish
+
+The validation performed for Rfactor provides empirical evidence that
+the implemented methods reproduce the intended rainfall-erosivity
+calculations and closely reproduce RIST 3.99.10 for the tested
+fixed-interval cases.
+
+It does not establish that:
+
+- every version of RIST behaves identically;
+- variable-interval RIST input behaves identically to the validated
+  fixed-interval mode;
+- every possible rainfall temporal resolution has been tested;
+- a gapped rainfall archive is climatologically complete;
+- monthly or yearly values calculated from incomplete records are
+  representative climatological R-factor estimates;
+- other USLE or RUSLE factors can be derived from Rfactor outputs.
+
+Scientific interpretation of the resulting erosivity values therefore
+remains dependent on the quality, temporal resolution, completeness,
+and representativeness of the rainfall observations supplied by the
+user.
+
+# Reproducibility
+
+The public source repository contains synthetic validation scripts and
+their generated comparison inputs under `data-raw/`.
+
+These include dedicated experiments for:
+
+- canonical RIST comparison;
+- storm-separation edge cases;
+- storm-break precipitation behaviour;
+- kinetic-energy equations;
+- temporal resolution.
+
+The real Meteo Romania source precipitation files and their detailed
+real-data validation outputs are not distributed.
+
+The package test suite additionally protects the numerical behaviour of
+the public functions, including strict omission boundaries, configurable
+storm-break duration, energy equations, temporal-resolution
+compatibility, sparse-event handling, and aggregation rules.
+
+# References
+
+Brown, L. C., and G. R. Foster. 1987. Storm erosivity using idealized
+intensity distributions. *Transactions of the ASAE* 30(2): 379-386.
+doi: 10.13031/2013.31957.
+
+Laws, J. O., and D. A. Parsons. 1943. The relation of raindrop-size to
+intensity. *Transactions, American Geophysical Union* 24(2): 452-460.
+doi: 10.1029/TR024i002p00452.
+
+McGregor, K. C., R. L. Bingner, A. J. Bowie, and G. R. Foster. 1995.
+Erosivity index values for northern Mississippi. *Transactions of the
+ASAE* 38(4): 1039-1047. doi: 10.13031/2013.27921.
+
+Renard, K. G., G. R. Foster, G. A. Weesies, D. K. McCool, and
+D. C. Yoder, coordinators. 1997. *Predicting Soil Erosion by Water: A
+Guide to Conservation Planning with the Revised Universal Soil Loss
+Equation (RUSLE).* U.S. Department of Agriculture, Agriculture
+Handbook No. 703.
+
+U.S. Department of Agriculture, Agricultural Research Service. RIST:
+Rainfall Intensity Summarization Tool.
+
+U.S. Department of Agriculture, Agricultural Research Service. Using
+RIST to Convert Rainfall Records into Erosion Model Inputs.
+
+Wischmeier, W. H., and D. D. Smith. 1978. *Predicting Rainfall Erosion
+Losses: A Guide to Conservation Planning.* U.S. Department of
+Agriculture, Agriculture Handbook No. 537.

@@ -1,0 +1,12 @@
+case_id,date,description
+A,2025-08-01,5 h 59 min separation
+B,2025-08-02,Exactly 6 h separation
+C,2025-08-03,6 h 01 min separation
+D,2025-08-04,0.001 mm intermediate rainfall
+E,2025-08-05,1.269 mm intermediate rainfall
+F,2025-08-06,1.270 mm intermediate rainfall
+G,2025-08-07,1.271 mm intermediate rainfall
+H,2025-08-08,5 mm in one minute
+I,2025-08-09,7 mm in one minute
+J,2025-08-10,13 mm in one minute
+K,2025-08-11,13 mm in two consecutive minutes
