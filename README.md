@@ -44,14 +44,14 @@ The public workflow is built around:
 `Rfactor` is currently under development and is not yet available from
 CRAN.
 
-From a local checkout of the package source, install it with:
+You can install the development version from GitHub with:
 
 ``` r
-devtools::install()
+install.packages("remotes")
+remotes::install_github("adrianira/Rfactor")
 ```
 
-Installation instructions for the public Git repository will be added
-when the repository address is finalized.
+If `remotes` is already installed, only the second command is needed.
 
 ## Quick start
 
@@ -260,4 +260,5 @@ those RIST-specific differences.
 
 ## License
 
-`Rfactor` is released under the MIT License.
+`Rfactor` is free software licensed under the GNU General Public
+License, version 3 or any later version (GPL-3.0-or-later).
