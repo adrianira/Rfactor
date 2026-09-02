@@ -27,14 +27,21 @@ The package implements a workflow for:
 4. calculating event EI30 erosivity;
 5. classifying events according to configurable omission criteria;
 6. aggregating contributing event EI30 values by calendar month or
-   year.
+   year;
+7. calculating multi-year mean monthly or annual rainfall erosivity
+   from those period totals.
 
 The package does not calculate the remaining USLE or RUSLE factors and
 does not perform spatial interpolation or mapping.
 
-The methods implemented in `Rfactor` were empirically compared with
-RIST 3.99.10 using controlled synthetic rainfall records and real
-precipitation records.
+The rainfall-event and erosivity methods implemented in `Rfactor` were
+empirically compared with RIST 3.99.10 using controlled synthetic
+rainfall records and real precipitation records.
+
+RIST (Rainfall Intensity Summarization Tool) is a rainfall-analysis
+program developed and distributed by the U.S. Department of
+Agriculture, Agricultural Research Service (USDA ARS). The official
+RIST software page is maintained by USDA ARS.
 
 Unless explicitly stated otherwise, statements about RIST behaviour in
 this vignette refer specifically to the RIST 3.99.10 fixed-interval
@@ -70,10 +77,17 @@ climatological long-term mean annual quantity. It sums contributing
 event EI30 values within a requested calendar month or year.
 
 Consequently, a yearly result from `rf_calculate_rfactor()` is the
-erosivity calculated from the events available for that year. A
-representative long-term R-factor requires an appropriate multi-year
-record and a separate assessment of completeness and
-representativeness.
+erosivity calculated from the events available for that year.
+
+Multi-year mean monthly or annual rainfall erosivity can subsequently
+be calculated from these period totals with
+`rf_calculate_mean_rfactor()`.
+
+The averaging operation does not determine whether the underlying
+rainfall record is climatologically complete or representative. A
+representative long-term R-factor therefore still requires an
+appropriate multi-year record and a separate assessment of completeness
+and representativeness.
 
 # Rainfall-event separation
 
@@ -687,6 +701,82 @@ Events are assigned to a calendar period according to
 `event_start`. An event crossing a month or year boundary is therefore
 assigned in full to the period in which it began.
 
+# Multi-year mean rainfall erosivity
+
+`rf_calculate_mean_rfactor()` operates on monthly or yearly R-factor
+values, typically produced by `rf_calculate_rfactor()`.
+
+For yearly input, the multi-year mean is
+
+\[
+\bar{R} =
+\frac{1}{n}
+\sum_{y=1}^{n} R_y,
+\]
+
+where \(R_y\) is an available yearly rainfall-erosivity value and
+\(n\) is the number of non-missing yearly values.
+
+For monthly input, a separate mean is calculated for each calendar
+month:
+
+\[
+\bar{R}_m =
+\frac{1}{n_m}
+\sum_{y=1}^{n_m} R_{y,m},
+\]
+
+where \(R_{y,m}\) is the rainfall erosivity for calendar month \(m\)
+in year \(y\), and \(n_m\) is the number of non-missing values
+available for that month.
+
+Missing `R` values are excluded from the calculation. Genuine zero
+values are retained because `R = 0` represents an available period
+with no contributing erosive events.
+
+For example,
+
+```text
+year    R
+2020  800
+2021  900
+2022   NA
+2023  700
+2024    0
+```
+
+produces
+
+```text
+mean_R = 600
+n_years = 4
+```
+
+because the missing value is excluded but the genuine zero remains in
+the calculation.
+
+For monthly input, `n_years` is calculated separately for each calendar
+month. Different months can therefore have different numbers of
+contributing years.
+
+Completely absent years or month-year combinations are not generated or
+imputed. A represented calendar month for which all supplied R-factor
+values are missing is returned with `mean_R = NA` and `n_years = 0`.
+
+The mean annual R-factor is calculated directly from yearly R-factor
+values. It is not calculated by summing the twelve multi-year monthly
+means. Summing monthly means can give a different result when data
+availability differs among calendar months.
+
+The function performs arithmetic averaging only. It does not assess
+whether individual monthly or yearly values were derived from complete
+rainfall records and does not determine whether the resulting mean is
+climatologically representative.
+
+These averaging rules are protected by the package test suite. They are
+not derived from, or intended to reproduce, a separate RIST averaging
+algorithm.
+
 # What validation does and does not establish
 
 The validation performed for Rfactor provides empirical evidence that
@@ -703,6 +793,9 @@ It does not establish that:
 - a gapped rainfall archive is climatologically complete;
 - monthly or yearly values calculated from incomplete records are
   representative climatological R-factor estimates;
+- a multi-year arithmetic mean is necessarily a representative climatic
+  R-factor when the underlying record is incomplete or
+  unrepresentative;
 - other USLE or RUSLE factors can be derived from Rfactor outputs.
 
 Scientific interpretation of the resulting erosivity values therefore
@@ -729,7 +822,8 @@ real-data validation outputs are not distributed.
 The package test suite additionally protects the numerical behaviour of
 the public functions, including strict omission boundaries, configurable
 storm-break duration, energy equations, temporal-resolution
-compatibility, sparse-event handling, and aggregation rules.
+compatibility, sparse-event handling, period aggregation, and
+multi-year averaging rules.
 
 # References
 
@@ -752,10 +846,13 @@ Equation (RUSLE).* U.S. Department of Agriculture, Agriculture
 Handbook No. 703.
 
 U.S. Department of Agriculture, Agricultural Research Service. RIST:
-Rainfall Intensity Summarization Tool.
+Rainfall Intensity Summarization Tool. Available at:
+<https://www.ars.usda.gov/southeast-area/oxford-ms/national-sedimentation-laboratory/watershed-physical-processes-research/research/rist/rist-rainfall-intensity-summarization-tool/>.
 
 U.S. Department of Agriculture, Agricultural Research Service. Using
-RIST to Convert Rainfall Records into Erosion Model Inputs.
+RIST to Convert Rainfall Records into Erosion Model Inputs. Available
+at:
+<https://www.ars.usda.gov/southeast-area/oxford-ms/national-sedimentation-laboratory/water-quality-and-ecology-research/docs/using-rist-to-convert-rainfall-records-into-erosion-model-inputs/>.
 
 Wischmeier, W. H., and D. D. Smith. 1978. *Predicting Rainfall Erosion
 Losses: A Guide to Conservation Planning.* U.S. Department of

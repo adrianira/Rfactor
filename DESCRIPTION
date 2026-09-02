@@ -1,6 +1,6 @@
 Package: Rfactor
 Title: Rainfall Erosivity Calculations from Precipitation Records
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person(
         given = "Adrian",
@@ -10,13 +10,17 @@ Authors@R:
         comment = c(ORCID = "0000-0002-9496-5588")
     )
 Description:
-    Provides tools for calculating rainfall erosivity from
-    timestamped precipitation records. The package identifies rainfall events,
-    calculates maximum rolling rainfall intensities, rainfall kinetic energy,
-    and event EI30 erosivity, and aggregates contributing event erosivity to
-    monthly and yearly totals. Storm separation, event omission criteria,
-    intensity durations, and rainfall kinetic-energy equations are
-    configurable.
+    Calculates rainfall erosivity from timestamped precipitation records.
+    The package identifies rainfall events, calculates continuous rolling
+    rainfall intensities, rainfall kinetic energy, and event EI30 erosivity,
+    aggregates contributing event erosivity to monthly and yearly totals, and
+    calculates multi-year mean monthly and annual rainfall erosivity. Storm
+    separation, event omission criteria, intensity durations, and rainfall
+    kinetic-energy equations are configurable. Rainfall kinetic energy can be
+    calculated using the formulations of Brown and Foster (1987)
+    <doi:10.13031/2013.31957>, McGregor et al. (1995)
+    <doi:10.13031/2013.27921>, and Laws and Parsons (1943)
+    <doi:10.1029/TR024i002p00452>.
 License: GPL (>= 3)
 URL: https://github.com/adrianira/Rfactor
 BugReports: https://github.com/adrianira/Rfactor/issues

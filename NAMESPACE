@@ -3,6 +3,7 @@
 S3method(print,rf_settings)
 export(rf_calculate_ei30)
 export(rf_calculate_energy)
+export(rf_calculate_mean_rfactor)
 export(rf_calculate_rfactor)
 export(rf_identify_storms)
 export(rf_max_intensity)

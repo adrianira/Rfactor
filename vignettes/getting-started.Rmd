@@ -26,7 +26,9 @@ A typical workflow consists of:
 3. calculating maximum rainfall intensities and rainfall kinetic energy;
 4. calculating event EI30 erosivity;
 5. classifying events according to configurable omission criteria;
-6. aggregating erosive-event EI30 by calendar month or year.
+6. aggregating contributing erosive-event EI30 by calendar month or year;
+7. calculating multi-year mean monthly or annual rainfall erosivity from
+   those period totals.
 
 The package focuses specifically on rainfall erosivity. It does not
 calculate the other USLE or RUSLE factors and does not perform spatial
@@ -265,21 +267,130 @@ yearly
 `n_events` is the number of erosive events with non-missing EI30 that
 actually contribute to the reported total.
 
-# Interpreting the yearly result
+Because the example rainfall record contains observations from only one
+year, the resulting yearly value is a period total, not a multi-year
+mean R-factor.
+
+# Multi-year mean rainfall erosivity
 
 A yearly `R` value returned by `rf_calculate_rfactor()` is the sum of
 contributing event EI30 values calculated from the rainfall data
 available for that calendar year.
 
-It should not automatically be interpreted as the climatological
-long-term mean annual rainfall-runoff erosivity factor used by USLE or
-RUSLE.
+It should not by itself be interpreted as the climatological long-term
+mean annual rainfall-runoff erosivity factor used by USLE or RUSLE.
 
-Deriving a representative long-term R-factor requires an appropriate
-multi-year rainfall record together with an assessment of record
-completeness and representativeness.
+Once monthly or yearly R-factor values have been calculated for several
+years, `rf_calculate_mean_rfactor()` can be used to calculate their
+multi-year arithmetic mean.
 
-`Rfactor` deliberately does not perform that completeness assessment.
+## Mean annual rainfall erosivity
+
+For example, consider five yearly R-factor values:
+
+```{r mean-annual-rfactor}
+yearly_multi_year <- data.frame(
+  year = 2020:2024,
+  R = c(
+    800,
+    900,
+    NA,
+    700,
+    0
+  )
+)
+
+annual_mean <- rf_calculate_mean_rfactor(
+  yearly_multi_year,
+  period = "yearly"
+)
+
+annual_mean
+```
+
+The missing value is excluded from the calculation, while the genuine
+zero is retained.
+
+The mean is therefore calculated from:
+
+```text
+800, 900, 700, 0
+```
+
+and `n_years = 4`.
+
+A zero is valid information: it represents an available period with no
+contributing erosive events. An `NA` value instead represents an
+unavailable R-factor value and is not included in the mean.
+
+## Multi-year monthly means
+
+For monthly input, a separate mean is calculated for each available
+calendar month.
+
+```{r mean-monthly-rfactor}
+monthly_multi_year <- data.frame(
+  year = c(
+    2020,
+    2021,
+    2022,
+    2020,
+    2021,
+    2022
+  ),
+  month = c(
+    7,
+    7,
+    7,
+    8,
+    8,
+    8
+  ),
+  R = c(
+    400,
+    500,
+    300,
+    0,
+    NA,
+    20
+  )
+)
+
+monthly_mean <- rf_calculate_mean_rfactor(
+  monthly_multi_year,
+  period = "monthly"
+)
+
+monthly_mean
+```
+
+July is calculated from three available yearly values. August is
+calculated from two available values because its missing value is
+excluded, while `R = 0` remains part of the calculation.
+
+The returned `n_years` column therefore reports the number of
+non-missing R-factor values actually used for each calendar month.
+
+Calendar months that are completely absent from the supplied table are
+not generated.
+
+## Annual versus monthly means
+
+The mean annual R-factor is calculated directly from yearly R-factor
+values.
+
+It is not calculated by summing the twelve multi-year monthly means.
+Those two quantities need not be identical when different calendar
+months contain different numbers of available years.
+
+`rf_calculate_mean_rfactor()` also does not determine whether an
+available monthly or yearly R-factor value was derived from a complete
+rainfall record.
+
+Deriving a representative climatic R-factor therefore still requires
+an appropriate multi-year rainfall record together with an assessment
+of record completeness and representativeness. `Rfactor` deliberately
+leaves that assessment to the user.
 
 # Including all rainfall events
 
@@ -405,6 +516,7 @@ documentation:
 ?rf_identify_storms
 ?rf_calculate_ei30
 ?rf_calculate_rfactor
+?rf_calculate_mean_rfactor
 ```
 
 A separate methodology and validation vignette documents the

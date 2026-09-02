@@ -27,11 +27,12 @@ timestamped precipitation records.
 
 The package identifies independent rainfall events, calculates maximum
 rolling rainfall intensities, rainfall kinetic energy, and event EI30
-erosivity, and aggregates erosive-event EI30 to monthly or yearly
-calendar totals.
+erosivity, aggregates contributing event EI30 to monthly or yearly
+calendar totals, and calculates multi-year mean rainfall erosivity from
+those period totals.
 
-These quantities can be used in the derivation of the rainfall-runoff
-erosivity factor (R-factor) used by USLE and RUSLE.
+These quantities support calculation of the rainfall-runoff erosivity
+factor (R-factor) used by USLE and RUSLE.
 
 `Rfactor` focuses on rainfall erosivity calculations. It does not
 calculate the other USLE/RUSLE factors and does not perform spatial
@@ -51,8 +52,10 @@ The public workflow is built around:
 -   `rf_calculate_energy()` — calculate rainfall kinetic energy;
 -   `rf_calculate_ei30()` — calculate event energy, intensities, EI30,
     and erosive-event classification;
--   `rf_calculate_rfactor()` — aggregate erosive-event EI30 by month or
-    year.
+-   `rf_calculate_rfactor()` — aggregate contributing erosive-event EI30
+    by month or year;
+-   `rf_calculate_mean_rfactor()` — calculate multi-year mean monthly or
+    annual rainfall erosivity from monthly or yearly R-factor values.
 
 ## Installation
 
@@ -137,6 +140,27 @@ yearly <- rf_calculate_rfactor(
   period = "yearly"
 )
 ```
+
+Calculate multi-year mean monthly and annual rainfall erosivity:
+
+```{r mean-rfactor, eval = FALSE}
+monthly_mean <- rf_calculate_mean_rfactor(
+  monthly,
+  period = "monthly"
+)
+
+annual_mean <- rf_calculate_mean_rfactor(
+  yearly,
+  period = "yearly"
+)
+```
+
+These calculations are meaningful as multi-year means when the supplied
+monthly or yearly R-factor table spans multiple years.
+
+For monthly input, a separate mean is calculated for each available
+calendar month. For yearly input, the available yearly R-factor values
+are averaged directly.
 
 ## Calculation settings
 
@@ -233,7 +257,7 @@ observed and dry.
 
 Completely absent months or years are not created or imputed.
 
-## Interpreting `R`
+## Period totals and multi-year mean R-factor
 
 `rf_calculate_rfactor()` sums the EI30 values of contributing erosive
 events within the requested calendar month or year.
@@ -242,19 +266,75 @@ A monthly or yearly value returned by this function is therefore an
 erosivity total calculated from the rainfall events available for that
 period.
 
-A yearly result is **not automatically the climatological long-term mean
-annual R-factor** used by USLE or RUSLE. Deriving a representative
-long-term R-factor requires an appropriate multi-year rainfall record
-and an assessment of record completeness and representativeness.
+A yearly value from `rf_calculate_rfactor()` is **not automatically a
+climatological long-term mean annual R-factor**.
 
-Calendar periods represented by rainfall events are retained even when
-none of those events are erosive; such periods have `R = 0` and
-`n_events = 0`. Completely absent calendar periods are not generated.
+Multi-year mean rainfall erosivity is calculated with
+`rf_calculate_mean_rfactor()`.
+
+For yearly input, the function calculates the arithmetic mean of the
+available yearly R-factor values:
+
+\[
+\bar{R} =
+\frac{1}{n}
+\sum_{y=1}^{n} R_y
+\]
+
+For monthly input, a separate multi-year mean is calculated for each
+calendar month:
+
+\[
+\bar{R}_m =
+\frac{1}{n_m}
+\sum_{y=1}^{n_m} R_{y,m}
+\]
+
+where `n_years` reports the number of non-missing R-factor values used
+in each mean.
+
+Missing `R` values are excluded from the calculation. Genuine zero
+values are retained because `R = 0` represents a valid period with no
+contributing erosive events.
+
+For example, the yearly values
+
+```text
+800, 900, NA, 700, 0
+```
+
+produce a mean based on
+
+```text
+800, 900, 700, 0
+```
+
+so `n_years = 4`.
+
+Calendar periods represented by rainfall events are retained by
+`rf_calculate_rfactor()` even when none of those events are erosive;
+such periods have `R = 0` and `n_events = 0`. Completely absent calendar
+periods are not generated.
+
+Similarly, `rf_calculate_mean_rfactor()` does not create missing years
+or month-year combinations. A calendar month that is completely absent
+from the supplied monthly table is not generated.
+
+The mean annual R-factor is calculated directly from yearly R-factor
+values. It is **not** calculated by summing the twelve multi-year
+monthly means. This distinction matters when the number of available
+years differs among calendar months.
+
+`Rfactor` does not determine whether an available monthly or yearly
+R-factor value was derived from a climatologically complete rainfall
+record. Assessment of completeness and representativeness remains the
+responsibility of the user.
 
 ## Validation
 
-`Rfactor` has been empirically compared with RIST 3.99.10 using
-fixed-interval rainfall input.
+`Rfactor` has been empirically compared with
+[RIST (Rainfall Intensity Summarization Tool)](https://www.ars.usda.gov/southeast-area/oxford-ms/national-sedimentation-laboratory/watershed-physical-processes-research/research/rist/rist-rainfall-intensity-summarization-tool/)
+3.99.10 using fixed-interval rainfall input.
 
 Validation includes synthetic tests of rainfall-event separation,
 continuous rolling intensities, strict omission thresholds,

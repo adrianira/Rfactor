@@ -1,3 +1,50 @@
+# Rfactor 0.2.0
+
+## New features
+
+* Added `rf_calculate_mean_rfactor()` for calculating multi-year mean
+  rainfall erosivity from monthly or yearly R-factor values.
+
+* For yearly input, the function calculates the arithmetic mean of available
+  yearly R-factor values.
+
+* For monthly input, the function calculates a separate multi-year mean for
+  each available calendar month.
+
+* Missing `R` values are excluded from multi-year means, while genuine
+  `R = 0` values are retained.
+
+* Added `n_years` to report the number of non-missing R-factor values
+  contributing to each multi-year mean.
+
+* Missing years and month-year combinations are not generated or imputed.
+  Calendar months completely absent from the supplied input are not created.
+
+* Mean annual rainfall erosivity is calculated directly from yearly R-factor
+  values rather than by summing multi-year monthly means.
+
+## Documentation
+
+* Extended the package workflow documentation to distinguish monthly and
+  yearly erosivity totals from multi-year mean rainfall erosivity.
+
+* Updated the README and getting-started vignette with examples of
+  `rf_calculate_mean_rfactor()`.
+
+* Updated the methods and validation vignette to document multi-year
+  averaging rules and their relationship to record completeness and
+  representativeness.
+
+* Added links to the official USDA Agricultural Research Service RIST
+  resources in the validation documentation.
+
+## Testing
+
+* Added tests for yearly and monthly multi-year averaging, including handling
+  of missing values, genuine zero values, absent calendar months, duplicate
+  periods, and invalid year, month, and R-factor values.
+
+
 # Rfactor 0.1.0
 
 ## Initial release

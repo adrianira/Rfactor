@@ -9,3 +9,6 @@
 /data-raw/real-validation/
 /doc/
 /Meta/
+Rfactor.Rcheck/
+Rfactor_*.tar.gz
+Rfactor-manual.pdf
