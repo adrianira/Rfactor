@@ -5,6 +5,9 @@
 
 <!-- badges: start -->
 
+[![CRAN
+status](https://www.r-pkg.org/badges/version/Rfactor)](https://CRAN.R-project.org/package=Rfactor)
+
 <!-- badges: end -->
 
 `Rfactor` is an R package for calculating rainfall erosivity from
@@ -44,8 +47,11 @@ The public workflow is built around:
 
 ## Installation
 
-`Rfactor` is currently under development and is not yet available from
-CRAN.
+`Rfactor` is available from CRAN:
+
+``` r
+install.packages("Rfactor")
+```
 
 You can install the development version from GitHub with:
 
@@ -55,6 +61,9 @@ remotes::install_github("adrianira/Rfactor")
 ```
 
 If `remotes` is already installed, only the second command is needed.
+
+The GitHub development version may contain changes that are not yet
+available in the CRAN release.
 
 ## Quick start
 
