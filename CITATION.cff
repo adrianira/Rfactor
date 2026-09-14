@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use Rfactor in your research, please cite the software."
+title: "Rfactor: Rainfall Erosivity Calculations from Precipitation Records"
+type: software
+authors:
+  - given-names: "Adrian"
+    family-names: "Irașoc"
+    orcid: "https://orcid.org/0000-0002-9496-5588"
+version: "0.2.0"
+doi: "10.32614/CRAN.package.Rfactor"
+repository-code: "https://github.com/adrianira/Rfactor"
+url: "https://CRAN.R-project.org/package=Rfactor"
+license: "GPL-3.0-or-later"
