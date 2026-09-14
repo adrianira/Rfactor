@@ -1,6 +1,6 @@
 Package: Rfactor
 Title: Rainfall Erosivity Calculations from Precipitation Records
-Version: 0.2.0
+Version: 0.2.0.9000
 Authors@R:
     person(
         given = "Adrian",
