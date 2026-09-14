@@ -7,6 +7,7 @@ authors:
     family-names: "Irașoc"
     orcid: "https://orcid.org/0000-0002-9496-5588"
 version: "0.2.0"
+date-released: 2026-09-12
 doi: "10.32614/CRAN.package.Rfactor"
 repository-code: "https://github.com/adrianira/Rfactor"
 url: "https://CRAN.R-project.org/package=Rfactor"
